@@ -60,7 +60,7 @@ private:
 			{
 				auto package = server.deque();
 				std::cout << "Package from " << package.source.hostname << ":"
-					<< std::to_string(package.source.port) << ", content:\n" << package.message.data();
+					<< std::to_string(package.source.port) << ", content:\n" << package.message.data() << "\n";
 			}
 		}
 	}

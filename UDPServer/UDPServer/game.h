@@ -82,6 +82,8 @@ private:
 
 				std::cout << "Package from " << package.source.hostname << ":"
 					<< std::to_string(package.source.port) << ", content:\n" << package.message.data() << "\n";
+
+				server.send(package.source, make_package("Got your message, verify it:\n" + std::string(package.message.data())));
 			}
 		}
 	}

@@ -84,11 +84,6 @@ public:
 		server.sin_family = AF_INET;
 		server.sin_addr.s_addr = INADDR_ANY;
 		server.sin_port = htons(adress.port);
-		if (server_adress)
-		{
-			InetPtonA(AF_INET, server_adress->hostname.c_str(), &server.sin_addr);
-			server.sin_port = htons(server_adress->port);
-		}
 
 		if (!server_adress)
 		{
@@ -116,9 +111,8 @@ public:
 		}
 		sockaddr_in target;
 		target.sin_family = AF_INET;
-		target.sin_port = htons(address.port);
-		//target.sin_addr.S_un.S_addr = inet_addr(address.hostname.c_str());
 		InetPtonA(AF_INET, address.hostname.c_str(), &target.sin_addr);
+		target.sin_port = htons(address.port);
 		int target_size = sizeof(target);
 		if (sendto(serverSocket, package.message.data(), static_cast<int>(package.message.size()),
 			0, reinterpret_cast<const sockaddr*>(&target), target_size) == SOCKET_ERROR)
@@ -162,7 +156,7 @@ public:
 					Udp_address
 					{
 						adress_buffer,
-						source.sin_port
+						ntohs(source.sin_port)
 					},
 					buffer
 				});
