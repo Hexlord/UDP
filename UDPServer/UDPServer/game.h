@@ -1,48 +1,14 @@
 #pragma once
 
-#include "network.h"
-
-#include <thread>
-#include <mutex>
-#include <iostream>
-#include <atomic>
+#include "server.h"
 
 namespace sb
 {
 
-class Game_udp_server : public Udp_server
+struct Player
 {
-public:
-	Game_udp_server() = default;
-	Game_udp_server(Udp_address address, Udp_config config)
-	{
-		start(address, config);
-	}
+	Udp_address address;
 
-	Udp_package_in deque() 
-	{
-		mutex.lock();
-		
-		Udp_package_in result = queue.front();
-		queue.erase(queue.begin());
-		
-		mutex.unlock();
-		return result;
-	}
-
-protected:
-	void process(Udp_package_in package) override
-	{
-		mutex.lock();
-
-		queue.push_back(package);
-
-		mutex.unlock();
-	}
-
-private:
-	std::mutex mutex;
-	std::vector<Udp_package_in> queue;
 };
 
 class Game
@@ -57,7 +23,7 @@ public:
 
 	void initialize()
 	{
-		server.start(Udp_address{ "localhost", 27015 }, Udp_config{});
+		server.start(Udp_address{ "127.0.0.1", 27015 }, Udp_config{ 512 }, nullptr);
 		
 		std::thread network([&] {server.listen(); });
 		std::thread logic([&] {run(); });
@@ -65,6 +31,7 @@ public:
 
 		logic.join();
 		network.join();
+		console.join();
 	}
 
 	using Message = std::vector<char>;
@@ -83,6 +50,22 @@ private:
 				running = false;
 				server.terminate();
 			}
+
+			if (command == "list")
+			{
+				for (auto address : addresses)
+				{
+					std::cout << "Connection on " << address.hostname << ":" << std::to_string(address.port) << "\n";
+				}
+			}
+
+			if (command == "players")
+			{
+				for (auto player : players)
+				{
+					std::cout << "Player on " << player.address.hostname << ":" << std::to_string(player.address.port) << "\n";
+				}
+			}
 		}
 	}
 
@@ -90,11 +73,23 @@ private:
 	{
 		while (running)
 		{
-			
+			if (server.has_package())
+			{
+				auto package = server.deque();
+
+				auto it = std::find_if(addresses.begin(), addresses.end(), [&](auto addr) {return addr.hostname == package.source.hostname && addr.port == package.source.port; });
+				if (it == addresses.end()) addresses.push_back(package.source);
+
+				std::cout << "Package from " << package.source.hostname << ":"
+					<< std::to_string(package.source.port) << ", content:\n" << package.message.data() << "\n";
+			}
 		}
 	}
 
-	std::atomic_bool running{ false };
+	std::vector<Player> players;
+	std::vector<Udp_address> addresses;
+
+	std::atomic_bool running{ true };
 	Game_udp_server server;
 
 };

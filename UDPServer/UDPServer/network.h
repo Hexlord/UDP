@@ -2,10 +2,11 @@
 
 #include <stdio.h>
 #include <winsock2.h>
-
+#include <WS2tcpip.h>
 #include <string>
 #include <algorithm>
 #include <vector>
+#include <iostream>
 
 #pragma comment(lib,"ws2_32.lib") //Winsock Library
 
@@ -26,7 +27,7 @@ struct Udp_config
 
 struct Udp_package_in
 {
-	sockaddr_in source;
+	Udp_address source;
 	std::vector<char> message;
 
 };
@@ -36,16 +37,23 @@ struct Udp_package_out
 	std::vector<char> message;
 };
 
+Udp_package_out make_package(std::string message)
+{
+	Udp_package_out result;
+	result.message.resize(message.size());
+	for (int i = 0, end = static_cast<int>(message.size()); i != end; ++i)
+	{
+		result.message[i] = message[i];
+	}
+	return result;
+}
+
 class Udp_server
 {
 public:
 	Udp_server() = default;
-	Udp_server(Udp_address address, Udp_config config)
-	{
-		start(address, config);
-	}
 
-	void terminate() 
+	void terminate()
 	{
 		if (state == State::Active)
 		{
@@ -55,9 +63,10 @@ public:
 		}
 	}
 
-	void start(Udp_address address, Udp_config config)
+	void start(Udp_address adress, Udp_config config, Udp_address* server_adress)
 	{
 		if (state != State::Empty) throw Illegal_state_exception{};
+		this->server_adress = server_adress;
 
 		WSADATA wsaData;
 		if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0)
@@ -65,7 +74,7 @@ public:
 			throw NetworkException{ WSAGetLastError() };
 		}
 
-		serverSocket = socket(AF_INET, SOCK_DGRAM, 0);
+		serverSocket = socket(AF_INET, SOCK_DGRAM, server_adress ? IPPROTO_UDP : 0);
 		if (serverSocket == INVALID_SOCKET)
 		{
 			throw NetworkException{ WSAGetLastError() };
@@ -74,13 +83,23 @@ public:
 		sockaddr_in server;
 		server.sin_family = AF_INET;
 		server.sin_addr.s_addr = INADDR_ANY;
-		server.sin_port = htons(address.port);
-
-		if (bind(serverSocket, reinterpret_cast<const sockaddr*>(&server), sizeof(server)) == SOCKET_ERROR)
+		server.sin_port = htons(adress.port);
+		if (server_adress)
 		{
-			throw NetworkException{ WSAGetLastError() };
+			InetPtonA(AF_INET, server_adress->hostname.c_str(), &server.sin_addr);
+			server.sin_port = htons(server_adress->port);
+		}
+
+		if (!server_adress)
+		{
+			if (bind(serverSocket, reinterpret_cast<const sockaddr*>(&server), sizeof(server)) == SOCKET_ERROR)
+			{
+				throw NetworkException{ WSAGetLastError() };
+			}
 		}
 		this->config = config;
+
+		std::cout << "Server started on " << adress.hostname << ":" << std::to_string(adress.port) << " socket " << std::to_string(serverSocket) << "\n";
 
 		state = State::Active;
 	}
@@ -97,10 +116,11 @@ public:
 		}
 		sockaddr_in target;
 		target.sin_family = AF_INET;
-		target.sin_port = address.port;
-		target.sin_addr.S_un.S_addr = inet_addr(address.hostname.c_str());
+		target.sin_port = htons(address.port);
+		//target.sin_addr.S_un.S_addr = inet_addr(address.hostname.c_str());
+		InetPtonA(AF_INET, address.hostname.c_str(), &target.sin_addr);
 		int target_size = sizeof(target);
-		if (sendto(serverSocket, package.message.data(), package.message.size(),
+		if (sendto(serverSocket, package.message.data(), static_cast<int>(package.message.size()),
 			0, reinterpret_cast<const sockaddr*>(&target), target_size) == SOCKET_ERROR)
 		{
 			throw NetworkException{ WSAGetLastError() };
@@ -110,6 +130,12 @@ public:
 	void listen()
 	{
 		if (state != State::Active) throw Illegal_state_exception{};
+		
+		if (server_adress)
+		{
+			send(*server_adress, make_package("UDP punch-through"));
+		}
+
 		while (true)
 		{
 			std::vector<char> buffer(config.packageSize);
@@ -119,7 +145,7 @@ public:
 			int source_size = static_cast<int>(sizeof(source));
 
 			// wait for data from clients
-			auto received = recvfrom(serverSocket, buffer.data(), buffer.size(), 0,
+			auto received = recvfrom(serverSocket, buffer.data(), static_cast<int>(buffer.size()), 0,
 				reinterpret_cast<sockaddr*>(&source), &source_size);
 			if (received == SOCKET_ERROR)
 			{
@@ -127,9 +153,17 @@ public:
 				throw NetworkException{ WSAGetLastError() };
 			}
 
+			char adress_buffer[INET_ADDRSTRLEN];
+			InetNtop(AF_INET, &source.sin_addr, adress_buffer, INET_ADDRSTRLEN);
+
+
 			process(Udp_package_in
 				{
-					source,
+					Udp_address
+					{
+						adress_buffer,
+						source.sin_port
+					},
 					buffer
 				});
 		}
@@ -141,7 +175,7 @@ protected:
 
 private:
 
-	
+
 
 
 	struct Package_overflow_exception { };
@@ -153,6 +187,7 @@ private:
 		Active,
 		Terminated
 	};
+	Udp_address* server_adress = nullptr;
 	Udp_config config;
 	State state{ State::Empty };
 	SOCKET serverSocket{ INVALID_SOCKET };

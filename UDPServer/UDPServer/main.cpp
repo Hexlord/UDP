@@ -1,12 +1,9 @@
 #include "network.h"
 #include "game.h"
 
-namespace sb
+int main(int argc, char** argv)
 {
+	sb::Game game;
 
-int main(void)
-{
-	Game game;
-}
-
+	return 0;
 }
