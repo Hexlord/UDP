@@ -24,13 +24,15 @@ public:
 	void initialize()
 	{
 		server.start(Udp_address{ "127.0.0.1", 27015 }, Udp_config{ 512 }, nullptr);
-		
-		std::thread network([&] {server.listen(); });
+
+		std::thread network_listen([&] {server.listen_loop(); });
+		std::thread network_send([&] {server.resend_loop(); });
 		std::thread logic([&] {run(); });
 		std::thread console([&] {run_console(); });
 
 		logic.join();
-		network.join();
+		network_listen.join();
+		network_send.join();
 		console.join();
 	}
 
@@ -77,13 +79,16 @@ private:
 			{
 				auto package = server.deque();
 
+				std::string message;
+				if (package.message.size() != 0) message = package.message.data();
+
 				auto it = std::find_if(addresses.begin(), addresses.end(), [&](auto addr) {return addr.hostname == package.source.hostname && addr.port == package.source.port; });
 				if (it == addresses.end()) addresses.push_back(package.source);
 
 				std::cout << "Package from " << package.source.hostname << ":"
-					<< std::to_string(package.source.port) << ", content:\n" << package.message.data() << "\n";
+					<< std::to_string(package.source.port) << ", content:\n" << message << "\n";
 
-				server.send(package.source, make_package("Got your message, verify it:\n" + std::string(package.message.data())));
+				//server.send(package.source, make_package("Got your message, verify it:\n" + message));
 			}
 		}
 	}

@@ -17,14 +17,16 @@ public:
 
 	void initialize()
 	{
-		server.start(Udp_address{ "127.0.0.1", 27015 }, Udp_config{512}, &login_server_adress);
+		server.start(Udp_address{ "127.0.0.1", 27016 }, Udp_config{512}, &login_server_adress);
 
-		std::thread network([&] {server.listen(); });
+		std::thread network_listen([&] {server.listen_loop(); });
+		std::thread network_send([&] {server.resend_loop(); });
 		std::thread logic([&] {run(); });
 		std::thread console([&] {run_console(); });
 
 		logic.join();
-		network.join();
+		network_listen.join();
+		network_send.join();
 		console.join();
 	}
 
@@ -47,7 +49,12 @@ private:
 
 			if (command == "login")
 			{
-				server.send(login_server_adress, make_package("I am Sasha, please login me"));
+				server.send(login_server_adress, make_package("Please log me in"));
+			}
+
+			if(command.find("say ") == 0)
+			{
+				server.send(login_server_adress, make_package(command.substr(4, command.size() - 4)));
 			}
 		}
 	}
