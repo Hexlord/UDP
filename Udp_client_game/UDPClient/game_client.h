@@ -83,6 +83,7 @@ private:
 
 	Udp_address login_server_adress
 	{
+		//"109.167.160.14",
 		"127.0.0.1",
 		27015
 	};

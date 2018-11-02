@@ -66,6 +66,8 @@ std::string to_string(Player_role role)
 	return "unassigned";
 }
 
+constexpr int Money_limit = 1000000;
+
 class Game
 {
 public:
@@ -242,6 +244,7 @@ private:
 
 		if (!validate_bet(string_bet))
 		{
+			string_bet = string_bet.substr(0, std::min(static_cast<int>(string_bet.size()), 100));
 			std::string text = "say " + string_bet + " is not a valid bet. Use \"bet <position> <amount>\" where position can be:\n";
 			for (auto& position : bet_positions)
 			{
@@ -407,6 +410,7 @@ private:
 					+ " on " + bet_info(player_it.bet_type) + " and won "
 					+ std::to_string(win);
 				player_it.money += win + player_it.bet;
+				player_it.money = std::min(player_it.money, Money_limit);
 			}
 			player_it.bet = 0;
 		}
